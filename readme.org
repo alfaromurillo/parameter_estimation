@@ -1,0 +1,24 @@
+#+TITLE: Estimation of unknown or uncertain parameters
+
+This material is part of a one-day course in transmission modeling for
+applied epidemiology that will be held on June 22, 2018 as part of the
+[[http://icmb2018.bucea.edu.cn/index.htm][6th International Conference on Mathematical Biology]], in Beijing, PR
+China.
+
+This repository contains the code for the lecture on "Estimation of
+unknown or uncertain parameters".
+
+* Instructions
+
+The code can be run from your browser visiting:
+
+https://mybinder.org/v2/gh/alfaromurillo/parameter_estimation/master?filepath=parameter_estimation.ipynb
+
+Alternatively, you could download the notebook (right click on this
+[[https://github.com/alfaromurillo/parameter_estimation/blob/master/parameter_estimation.ipynb?raw=true][link]] and choose 'Save link as...') and run it in your computer if you
+have the Jupyter Notebook and a Python installation with the SciPy,
+Matplotlib and ipywidgets libraries. The easiest way to install the
+Jupyter Notebook is to install the Anaconda Distribution, which
+includes every dependence needed (plus a lot more):
+https://www.anaconda.com/download. Follow the instructions there for
+your appropriate operative system.
