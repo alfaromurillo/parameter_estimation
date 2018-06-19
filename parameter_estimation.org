@@ -1,0 +1,178 @@
+** Preliminaries
+
+#+BEGIN_SRC python
+import numpy
+import pymc3
+from matplotlib import pyplot
+from scipy.integrate import odeint
+from scipy.optimize import minimize
+from ipywidgets import interact
+
+#+END_SRC
+
+
+#+BEGIN_SRC python
+
+exposure_to_rash = 17
+exposure_to_rash_range = [7, 21]
+rash = 5.5 # 5 to 6 days
+rash_range = [5, 6]
+# https://www.cdc.gov/vaccines/pubs/pinkbook/downloads/meas.pdf
+
+infectious_without_rash = 4
+# https://www.cdc.gov/measles/about/transmission.html
+infectious_without_rash_range = [3, 5]
+
+latent_period = exposure_to_rash - infectious_without_rash
+latent_period_range = [exposure_to_rash_range[0] - infectious_without_rash_range[1],
+                       exposure_to_rash_range[1] - infectious_without_rash_range[0]]
+
+infectious_period = rash + 2*infectious_without_rash
+infectious_period_range = [rash_range[0] + 2*infectious_without_rash_range[0],
+                           rash_range[1] + 2*infectious_without_rash_range[1]]
+
+outbreak_final_size = 383
+epidemic_peak = 17
+
+#+END_SRC
+
+
+#+BEGIN_SRC python
+def f(x, t, alpha, beta, gamma):
+    S = x[0]
+    L = x[1]
+    I = x[2]
+    R = x[3]
+
+    N = S + L + I + R
+
+    dS_dt = - beta*I/N*S
+    dL_dt = (beta*I/N)*S - alpha*L
+    dI_dt = alpha*L - gamma*I
+    dR_dt = gamma*I
+
+    return [dS_dt, dL_dt, dI_dt, dR_dt]
+
+def model(beta, at_risk, one_over_alpha=latent_period, one_over_gamma=infectious_period):
+
+    alpha = 1/one_over_alpha
+    gamma = 1/one_over_gamma
+
+    population = 32630 # Amish population
+
+    S0 = at_risk * population
+    L0 = 0
+    I0 = 1
+    R0 = 0
+
+    ts = numpy.arange(0, 366)
+    x0 = [S0, L0, I0, R0]
+    xs = odeint(f, x0, ts, (alpha, beta, gamma))
+
+    return xs
+
+def plot(xs):
+    ts = numpy.arange(0, 366)
+    pyplot.plot(ts, xs[:, 2])
+    pyplot.legend(["Infected"])
+    pyplot.xlabel("Time (days)")
+    pyplot.ylim([0, 400])
+    pyplot.show()
+
+    pyplot.plot(ts, xs[:, [0, -1]])
+    pyplot.legend(["Susceptible", "Recovered"])
+    pyplot.xlabel("Time (days)")
+    pyplot.ylim([0, numpy.sum(xs[0])])
+    pyplot.show()
+
+def print_info(xs):
+    final_size = xs[-1, -1]
+    print("Final size outbreak: {:.0f}".format(final_size))
+
+    peak = numpy.max(xs[:, 2])
+    print("Epidemic peak: {:.0f}".format(peak))
+
+def interact_function(beta=0.2, at_risk=0.05,
+                      one_over_alpha=latent_period,
+                      one_over_gamma=infectious_period):
+    xs = model(beta, at_risk, one_over_alpha, one_over_gamma)
+    plot(xs)
+    print_info(xs)
+
+interact(interact_function,
+         beta=(0.01, 0.3, 0.001),
+         at_risk=(0.005, 0.02, 0.005),
+         one_over_alpha=(2.0, 30.0, 0.5),
+         one_over_gamma=(2.0, 30.0, 0.5))
+#+END_SRC
+
+#+BEGIN_SRC python
+def function_to_minize(variables):
+    beta = variables[0]
+    at_risk = variables[1]
+    xs = model(beta=beta, at_risk=at_risk)
+    final_size = xs[-1, -1]
+    peak = numpy.max(xs[:, 2])
+    return (final_size-outbreak_final_size)**2
+
+minimize(function_to_minize, [0.2, 0.05], bounds=[(0, 1), (0.009, 0.5)])
+#+END_SRC
+
+#+BEGIN_SRC python
+interact_function(beta=, at_risk=)
+#+END_SRC
+
+#+BEGIN_SRC python
+def function_to_minize(variables):
+    beta = variables[0]
+    at_risk = variables[1]
+    xs = model(beta=beta, at_risk=at_risk)
+    final_size = xs[-1, -1]
+    peak = numpy.max(xs[:, 2])
+    return (final_size-outbreak_final_size)**2 + (peak-epidemic_peak)**2 + (xs[5*30, 2])**2
+
+minimize(function_to_minize, [0.2, 0.05], bounds=[(0, 1), (0.009, 0.5)])
+#+END_SRC
+
+#+BEGIN_SRC python
+interact_function(beta=, at_risk=)
+#+END_SRC
+
+#+BEGIN_SRC python
+def function_to_minize(variables):
+    xs = model(*variables)
+    final_size = xs[-1, -1]
+    peak = numpy.max(xs[:, 2])
+    return (final_size-outbreak_final_size)**2 + (peak-epidemic_peak)**2 + (xs[5*30, 2])**2
+
+minimize(function_to_minize,
+         [0.2, 0.05, latent_period, infectious_period],
+         bounds=[(0, 1), (0.009, 0.5), (2, 18), (10, 16)])
+
+#+END_SRC
+
+#+BEGIN_SRC python
+interact_function(beta=, at_risk=)
+#+END_SRC
+
+#+BEGIN_SRC python
+def function_to_minize(variables):
+    xs = model(*variables)
+    final_size = xs[-1, -1]
+    peak = numpy.max(xs[:, 2])
+    return (final_size-outbreak_final_size)**2 + 10*(peak-epidemic_peak)**2 + 10*(xs[5*30, 2])**2
+
+minimize(function_to_minize,
+         [0.2, 0.05, latent_period, infectious_period],
+         bounds=[(0, 1), (0.009, 0.5), (2, 18), (10, 16)])
+
+#+END_SRC
+
+#+BEGIN_SRC python
+interact_function(beta=, at_risk=)
+#+END_SRC
+
+
+# Local Variables:
+# org-src-preserve-indentation: t
+# End:
