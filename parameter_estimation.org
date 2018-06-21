@@ -1,41 +1,60 @@
-** Preliminaries
+* Preliminaries
+
+** Importing libraries
 
 #+BEGIN_SRC python
 import numpy
-import pymc3
 from matplotlib import pyplot
+from ipywidgets import interact
 from scipy.integrate import odeint
 from scipy.optimize import minimize
-from ipywidgets import interact
-
+from scipy import stats
 #+END_SRC
 
+** Information from literature
 
 #+BEGIN_SRC python
 
 exposure_to_rash = 17
-exposure_to_rash_range = [7, 21]
-rash = 5.5 # 5 to 6 days
-rash_range = [5, 6]
-# https://www.cdc.gov/vaccines/pubs/pinkbook/downloads/meas.pdf
+rash = 5.5
+# Source: https://www.cdc.gov/vaccines/pubs/pinkbook/downloads/meas.pdf
 
 infectious_without_rash = 4
-# https://www.cdc.gov/measles/about/transmission.html
-infectious_without_rash_range = [3, 5]
-
 latent_period = exposure_to_rash - infectious_without_rash
+infectious_period = rash + 2*infectious_without_rash
+# Source: https://www.cdc.gov/measles/about/transmission.html
+
+VE = 0.93
+# Source: https://www.cdc.gov/measles/vaccination.html
+
+coverage = 0.14
+population = 32630 # Amish population
+outbreak_final_size = 383
+epidemic_peak = 17
+# Source: https://www.nejm.org/doi/pdf/10.1056/NEJMoa1602295
+#+END_SRC
+
+** COMMENT Ranges
+
+#+BEGIN_SRC python
+exposure_to_rash_range = [7, 21]
+# Source: https://www.cdc.gov/vaccines/pubs/pinkbook/downloads/meas.pdf
+
+rash_range = [5, 6]
+# Source: https://www.cdc.gov/vaccines/pubs/pinkbook/downloads/meas.pdf
+
+infectious_without_rash_range = [infectious_without_rash-1,
+                                 infectious_without_rash+1]
+# Source: Assumption
+
 latent_period_range = [exposure_to_rash_range[0] - infectious_without_rash_range[1],
                        exposure_to_rash_range[1] - infectious_without_rash_range[0]]
-
-infectious_period = rash + 2*infectious_without_rash
 infectious_period_range = [rash_range[0] + 2*infectious_without_rash_range[0],
                            rash_range[1] + 2*infectious_without_rash_range[1]]
 
-outbreak_final_size = 383
-epidemic_peak = 17
-
 #+END_SRC
 
+** Measles model
 
 #+BEGIN_SRC python
 def f(x, t, alpha, beta, gamma):
@@ -53,23 +72,20 @@ def f(x, t, alpha, beta, gamma):
 
     return [dS_dt, dL_dt, dI_dt, dR_dt]
 
-def model(beta, at_risk, one_over_alpha=latent_period, one_over_gamma=infectious_period):
 
-    alpha = 1/one_over_alpha
-    gamma = 1/one_over_gamma
+def compute_ODE(alpha, beta, gamma, p, N):
 
-    population = 32630 # Amish population
-
-    S0 = at_risk * population
+    S0 = (1-p)*N - 1
     L0 = 0
     I0 = 1
-    R0 = 0
+    R0 = p*N
 
     ts = numpy.arange(0, 366)
     x0 = [S0, L0, I0, R0]
     xs = odeint(f, x0, ts, (alpha, beta, gamma))
 
     return xs
+
 
 def plot(xs):
     ts = numpy.arange(0, 366)
@@ -85,93 +101,247 @@ def plot(xs):
     pyplot.ylim([0, numpy.sum(xs[0])])
     pyplot.show()
 
+
 def print_info(xs):
-    final_size = xs[-1, -1]
+    final_size = xs[-1, -1] - xs[0, -1]
+    print("Final size outbreak: {:.0f}".format(final_size))
+
+
+def model(beta,
+          alpha=1/latent_period,
+          gamma=1/infectious_period,
+          p=coverage*VE,
+          N=population):
+    xs = compute_ODE(alpha, beta, gamma, p, N)
+    plot(xs)
+    print_info(xs)
+#+END_SRC
+
+* Estimating $\beta$ with $\mathcal{R}_{0}$
+** Estimating $\beta$ with a single $\mathcal{R}_{0}$
+
+#+BEGIN_SRC python
+R_0 = 15
+bar_beta = R_0 / infectious_period
+bar_beta
+#+END_SRC
+
+#+BEGIN_SRC python
+model(bar_beta)
+#+END_SRC
+
+** Estimating $\beta$ with an $\mathcal{R}_{0}$ range
+
+#+BEGIN_SRC python
+R_0_range = [12, 18]
+bar_beta_range = [R_0_range[i] / infectious_period for i in [0, 1]]
+bar_beta_range
+#+END_SRC
+
+#+BEGIN_SRC python
+[model(beta) for beta in bar_beta_range]
+#+END_SRC
+
+Back to presentation
+
+* Adjusting $\beta$ to match epidemic size
+
+#+BEGIN_SRC python
+interact(model, beta=(0.01, 1.1, 0.001))
+#+END_SRC
+
+Back to presentation
+
+* Bisection approach
+
+#+BEGIN_SRC python
+def compute_final_size(beta, alpha=1/latent_period,
+                       gamma=1/infectious_period, p=coverage*VE,
+                       N=population):
+    xs = compute_ODE(alpha, beta, gamma, p, N)
+    return xs[-1, -1] - xs[0, -1]
+#+END_SRC
+
+#+BEGIN_SRC python
+compute_final_size(0.8)
+#+END_SRC
+
+#+BEGIN_SRC python
+compute_final_size(0.01)
+#+END_SRC
+
+#+BEGIN_SRC python
+tolerance = 0.5
+
+beta1 = 0.1
+beta2 = 0.8
+
+bar_beta = (beta1 + beta2)/2
+
+while numpy.abs(compute_final_size(bar_beta) - outbreak_final_size) > tolerance:
+    if compute_final_size(bar_beta) < outbreak_final_size:
+        beta1 = bar_beta
+    else:
+        beta2 = bar_beta
+
+    bar_beta = (beta1 + beta2)/2
+
+#+END_SRC
+
+#+BEGIN_SRC python
+bar_beta
+#+END_SRC
+
+#+BEGIN_SRC python
+compute_final_size(bar_beta)
+#+END_SRC
+
+#+BEGIN_SRC python
+model(bar_beta)
+#+END_SRC
+
+Back to presentation
+
+* Least squares method
+
+#+BEGIN_SRC python
+def function_to_minize(variables):
+    beta = variables[0]
+    N = variables[1]
+
+    final_size = compute_final_size(beta=beta, N=N)
+    return (final_size-outbreak_final_size)**2
+
+minimize(function_to_minize, [0.9, 400])
+#+END_SRC
+
+#+BEGIN_SRC python
+model(beta=2.34228733, N=440.33110651)
+#+END_SRC
+
+How about another initial guess
+
+#+BEGIN_SRC python
+minimize(function_to_minize, [0.5, 3000])
+#+END_SRC
+
+#+BEGIN_SRC python
+model(beta=1.21481947e-01, N=2.93685955e+03)
+#+END_SRC
+
+Back to the presentation
+
+* Informing on the peak of the epidemic
+
+#+BEGIN_SRC python
+def print_info(xs):
+    final_size = xs[-1, -1] - xs[0, -1]
     print("Final size outbreak: {:.0f}".format(final_size))
 
     peak = numpy.max(xs[:, 2])
     print("Epidemic peak: {:.0f}".format(peak))
 
-def interact_function(beta=0.2, at_risk=0.05,
-                      one_over_alpha=latent_period,
-                      one_over_gamma=infectious_period):
-    xs = model(beta, at_risk, one_over_alpha, one_over_gamma)
-    plot(xs)
-    print_info(xs)
+#+END_SRC
 
-interact(interact_function,
-         beta=(0.01, 0.3, 0.001),
-         at_risk=(0.005, 0.02, 0.005),
-         one_over_alpha=(2.0, 30.0, 0.5),
-         one_over_gamma=(2.0, 30.0, 0.5))
+#+BEGIN_SRC python
+model(beta=2.34228733, N=440)
+#+END_SRC
+
+Back to the presentation
+
+* Least squares sum
+
+#+BEGIN_SRC python
+def compute_peak(beta, alpha=1/latent_period,
+                 gamma=1/infectious_period, p=coverage*VE,
+                 N=population):
+    xs = compute_ODE(alpha, beta, gamma, p, N)
+    return numpy.max(xs[:, 2])
+
 #+END_SRC
 
 #+BEGIN_SRC python
 def function_to_minize(variables):
     beta = variables[0]
-    at_risk = variables[1]
-    xs = model(beta=beta, at_risk=at_risk)
-    final_size = xs[-1, -1]
-    peak = numpy.max(xs[:, 2])
-    return (final_size-outbreak_final_size)**2
+    N = variables[1]
 
-minimize(function_to_minize, [0.2, 0.05], bounds=[(0, 1), (0.009, 0.5)])
+    final_size = compute_final_size(beta=beta, N=N)
+    peak = compute_peak(beta=beta, N=N)
+    return (final_size-outbreak_final_size)**2 + (peak-epidemic_peak)**2
+
+minimize(function_to_minize, [2.3, 440])
 #+END_SRC
 
 #+BEGIN_SRC python
-interact_function(beta=, at_risk=)
+model(beta=2.41907583e-01, N=4.39793937e+02)
 #+END_SRC
+
+Back to presentation
+
+* Penalizing least squares sum
 
 #+BEGIN_SRC python
 def function_to_minize(variables):
     beta = variables[0]
-    at_risk = variables[1]
-    xs = model(beta=beta, at_risk=at_risk)
-    final_size = xs[-1, -1]
-    peak = numpy.max(xs[:, 2])
-    return (final_size-outbreak_final_size)**2 + (peak-epidemic_peak)**2 + (xs[5*30, 2])**2
+    N = variables[1]
 
-minimize(function_to_minize, [0.2, 0.05], bounds=[(0, 1), (0.009, 0.5)])
+    final_size = compute_final_size(beta=beta, N=N)
+    peak = compute_peak(beta=beta, N=N)
+    return (final_size-outbreak_final_size)**2 + 20*(peak-epidemic_peak)**2
+
+minimize(function_to_minize, [2.3, 440])
 #+END_SRC
 
-#+BEGIN_SRC python
-interact_function(beta=, at_risk=)
-#+END_SRC
+** Solving negative values problem
 
 #+BEGIN_SRC python
 def function_to_minize(variables):
-    xs = model(*variables)
-    final_size = xs[-1, -1]
-    peak = numpy.max(xs[:, 2])
-    return (final_size-outbreak_final_size)**2 + (peak-epidemic_peak)**2 + (xs[5*30, 2])**2
+    beta = variables[0]
+    N = variables[1]
 
-minimize(function_to_minize,
-         [0.2, 0.05, latent_period, infectious_period],
-         bounds=[(0, 1), (0.009, 0.5), (2, 18), (10, 16)])
+    final_size = compute_final_size(beta=beta, N=N)
+    peak = compute_peak(beta=beta, N=N)
+    return (final_size-outbreak_final_size)**2 + 20*(peak-epidemic_peak)**2
 
+minimize(function_to_minize, [2.3, 440], bounds=[(0, 10), (outbreak_final_size, population)])
 #+END_SRC
 
 #+BEGIN_SRC python
-interact_function(beta=, at_risk=)
+model(beta=1.36960311e-01, N=7.53439081e+02)
+#+END_SRC
+
+** Did we solve the multiple solution problem?
+
+#+BEGIN_SRC python
+minimize(function_to_minize, [0.5, 3000])
 #+END_SRC
 
 #+BEGIN_SRC python
-def function_to_minize(variables):
-    xs = model(*variables)
-    final_size = xs[-1, -1]
-    peak = numpy.max(xs[:, 2])
-    return (final_size-outbreak_final_size)**2 + 10*(peak-epidemic_peak)**2 + 10*(xs[5*30, 2])**2
+model(beta=1.36883891e-01, N=7.55183251e+02)
+#+END_SRC
 
-minimize(function_to_minize,
-         [0.2, 0.05, latent_period, infectious_period],
-         bounds=[(0, 1), (0.009, 0.5), (2, 18), (10, 16)])
+Back to presentation
 
+* Maximum likelihood
+
+#+BEGIN_SRC python
+shape = 1547.59
+scale = 0.24748
+stats.gamma.mean(shape, scale=scale)
 #+END_SRC
 
 #+BEGIN_SRC python
-interact_function(beta=, at_risk=)
+stats.gamma.cdf(400, shape, scale=scale) - stats.gamma.cdf(360, shape, scale=scale)
 #+END_SRC
 
+#+BEGIN_SRC python
+ys = numpy.linspace(350, 420, 1000)
+pyplot.plot(ys, stats.gamma.pdf(ys, shape, scale=scale))
+pyplot.xlabel("Outbreak size")
+pyplot.show()
+#+END_SRC
+
+Back to presentation
 
 # Local Variables:
 # org-src-preserve-indentation: t
