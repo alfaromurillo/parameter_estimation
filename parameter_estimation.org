@@ -92,7 +92,7 @@ def plot(xs):
     pyplot.plot(ts, xs[:, 2])
     pyplot.legend(["Infected"])
     pyplot.xlabel("Time (days)")
-    pyplot.ylim([0, 400])
+    pyplot.ylim([0, 500])
     pyplot.show()
 
     pyplot.plot(ts, xs[:, [0, -1]])
@@ -118,7 +118,6 @@ def model(beta,
 #+END_SRC
 
 * Estimating $\beta$ with $\mathcal{R}_{0}$
-** Estimating $\beta$ with a single $\mathcal{R}_{0}$
 
 #+BEGIN_SRC python
 R_0 = 15
@@ -130,7 +129,7 @@ bar_beta
 model(bar_beta)
 #+END_SRC
 
-** Estimating $\beta$ with an $\mathcal{R}_{0}$ range
+Perhaps one value of $\mathcal{R}_{0}$ in the rage
 
 #+BEGIN_SRC python
 R_0_range = [12, 18]
@@ -173,7 +172,7 @@ compute_final_size(0.01)
 #+BEGIN_SRC python
 tolerance = 0.5
 
-beta1 = 0.1
+beta1 = 0.01
 beta2 = 0.8
 
 bar_beta = (beta1 + beta2)/2
